@@ -148,7 +148,7 @@ lint-fix = [
     "ruff check --fix",
 ]
 test = [
-    "pytest tests/ {args}",
+    "pytest tests/ server/tests/ {args}",
 ]
 
 [tool.ruff]

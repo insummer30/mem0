@@ -1,6 +1,8 @@
+import json
 import logging
 import os
 import secrets
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -13,8 +15,28 @@ from mem0 import Memory
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Load environment variables
-load_dotenv()
+SERVER_DIR = Path(__file__).resolve().parent
+DEFAULT_STARTUP_CONFIG_PATH = SERVER_DIR / "configs" / "config.json"
+
+
+def load_server_environment(server_dir: Optional[Path] = None) -> Optional[Path]:
+    """Load server/.env first, then fall back to the repo root .env."""
+    resolved_server_dir = (server_dir or SERVER_DIR).resolve()
+    server_env_path = resolved_server_dir / ".env"
+    root_env_path = resolved_server_dir.parent / ".env"
+
+    if server_env_path.exists():
+        load_dotenv(server_env_path, override=False)
+        return server_env_path
+
+    if root_env_path.exists():
+        load_dotenv(root_env_path, override=False)
+        return root_env_path
+
+    return None
+
+
+load_server_environment()
 
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
 
@@ -33,36 +55,27 @@ else:
         )
     logging.info("API key authentication enabled")
 
-POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "postgres")
-POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
-POSTGRES_DB = os.environ.get("POSTGRES_DB", "postgres")
-POSTGRES_USER = os.environ.get("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
-POSTGRES_COLLECTION_NAME = os.environ.get("POSTGRES_COLLECTION_NAME", "memories")
+def load_startup_config() -> Dict[str, Any]:
+    """Load the startup config from MEM0_CONFIG_PATH, defaulting to configs/config.json."""
+    config_path = os.environ.get("MEM0_CONFIG_PATH") or str(DEFAULT_STARTUP_CONFIG_PATH)
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-HISTORY_DB_PATH = os.environ.get("HISTORY_DB_PATH", "/app/history/history.db")
+    resolved_path = Path(config_path).expanduser()
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"MEM0_CONFIG_PATH file not found: {resolved_path}")
 
-DEFAULT_CONFIG = {
-    "version": "v1.1",
-    "vector_store": {
-        "provider": "pgvector",
-        "config": {
-            "host": POSTGRES_HOST,
-            "port": int(POSTGRES_PORT),
-            "dbname": POSTGRES_DB,
-            "user": POSTGRES_USER,
-            "password": POSTGRES_PASSWORD,
-            "collection_name": POSTGRES_COLLECTION_NAME,
-        },
-    },
-    "llm": {"provider": "openai", "config": {"api_key": OPENAI_API_KEY, "temperature": 0.2, "model": "gpt-4.1-nano-2025-04-14"}},
-    "embedder": {"provider": "openai", "config": {"api_key": OPENAI_API_KEY, "model": "text-embedding-3-small"}},
-    "history_db_path": HISTORY_DB_PATH,
-}
+    try:
+        config = json.loads(resolved_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"MEM0_CONFIG_PATH does not contain valid JSON: {resolved_path}") from exc
+
+    if not isinstance(config, dict):
+        raise ValueError(f"MEM0_CONFIG_PATH must point to a JSON object: {resolved_path}")
+
+    logging.info("Loading Mem0 startup config from %s", resolved_path)
+    return config
 
 
-MEMORY_INSTANCE = Memory.from_config(DEFAULT_CONFIG)
+MEMORY_INSTANCE = Memory.from_config(load_startup_config())
 
 app = FastAPI(
     title="Mem0 REST APIs",
