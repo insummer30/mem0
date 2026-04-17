@@ -41,7 +41,19 @@ def _mock_memory():
     mock_instance.delete_all.return_value = {"message": "Memories deleted successfully!"}
     mock_instance.reset.return_value = None
 
-    with patch.dict(os.environ, {"OPENAI_API_KEY": "fake-key"}):
+    with patch.dict(
+        os.environ,
+        {
+            "OPENAI_API_KEY": "fake-key",
+            "VECTOR_STORE_PROVIDER": "qdrant",
+            "VECTOR_STORE_HOST": "localhost",
+            "VECTOR_STORE_PORT": "6333",
+            "LLM_PROVIDER": "gemini",
+            "LLM_MODEL": "gemini-2.0-flash",
+            "EMBEDDER_PROVIDER": "gemini",
+            "EMBEDDER_MODEL": "models/gemini-embedding-001",
+        },
+    ):
         with patch("mem0.Memory.from_config", return_value=mock_instance):
             yield mock_instance
 

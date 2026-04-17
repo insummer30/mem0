@@ -16,27 +16,11 @@ from mem0 import Memory
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 SERVER_DIR = Path(__file__).resolve().parent
+SERVER_ENV_PATH = SERVER_DIR / ".env"
 DEFAULT_STARTUP_CONFIG_PATH = SERVER_DIR / "configs" / "config.json"
 
-
-def load_server_environment(server_dir: Optional[Path] = None) -> Optional[Path]:
-    """Load server/.env first, then fall back to the repo root .env."""
-    resolved_server_dir = (server_dir or SERVER_DIR).resolve()
-    server_env_path = resolved_server_dir / ".env"
-    root_env_path = resolved_server_dir.parent / ".env"
-
-    if server_env_path.exists():
-        load_dotenv(server_env_path, override=False)
-        return server_env_path
-
-    if root_env_path.exists():
-        load_dotenv(root_env_path, override=False)
-        return root_env_path
-
-    return None
-
-
-load_server_environment()
+if SERVER_ENV_PATH.exists():
+    load_dotenv(SERVER_ENV_PATH, override=False)
 
 ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "")
 
@@ -55,22 +39,41 @@ else:
         )
     logging.info("API key authentication enabled")
 
+
+def resolve_config_environment_variables(value: Any) -> Any:
+    """Recursively resolve env:VAR_NAME strings from the current environment."""
+    if isinstance(value, dict):
+        return {key: resolve_config_environment_variables(item) for key, item in value.items()}
+
+    if isinstance(value, list):
+        return [resolve_config_environment_variables(item) for item in value]
+
+    if isinstance(value, str) and value.startswith("env:"):
+        env_var = value.split(":", 1)[1]
+        env_value = os.environ.get(env_var)
+        if env_value is None:
+            raise ValueError(f"Environment variable '{env_var}' referenced in startup config is not set.")
+        return env_value
+
+    return value
+
 def load_startup_config() -> Dict[str, Any]:
-    """Load the startup config from MEM0_CONFIG_PATH, defaulting to configs/config.json."""
-    config_path = os.environ.get("MEM0_CONFIG_PATH") or str(DEFAULT_STARTUP_CONFIG_PATH)
+    """Load the startup config from CONFIG_PATH, defaulting to configs/config.json."""
+    config_path = os.environ.get("CONFIG_PATH") or os.environ.get("MEM0_CONFIG_PATH") or str(DEFAULT_STARTUP_CONFIG_PATH)
 
     resolved_path = Path(config_path).expanduser()
     if not resolved_path.exists():
-        raise FileNotFoundError(f"MEM0_CONFIG_PATH file not found: {resolved_path}")
+        raise FileNotFoundError(f"CONFIG_PATH file not found: {resolved_path}")
 
     try:
         config = json.loads(resolved_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"MEM0_CONFIG_PATH does not contain valid JSON: {resolved_path}") from exc
+        raise ValueError(f"CONFIG_PATH does not contain valid JSON: {resolved_path}") from exc
 
     if not isinstance(config, dict):
-        raise ValueError(f"MEM0_CONFIG_PATH must point to a JSON object: {resolved_path}")
+        raise ValueError(f"CONFIG_PATH must point to a JSON object: {resolved_path}")
 
+    config = resolve_config_environment_variables(config)
     logging.info("Loading Mem0 startup config from %s", resolved_path)
     return config
 

@@ -18,19 +18,20 @@ Follow the instructions in the [docs](https://docs.mem0.ai/open-source/features/
 
 ## Startup config files
 
-By default, the server starts with [`configs/config.json`](./configs/config.json). To boot with a different Mem0 config, set `MEM0_CONFIG_PATH` to another JSON file. The file is loaded during startup and passed directly to `Memory.from_config(...)`.
+By default, the server starts with [`configs/config.json`](./configs/config.json). To boot with a different Mem0 config, set `CONFIG_PATH` to another JSON file. The file is loaded during startup and passed directly to `Memory.from_config(...)`.
 
-If `MEM0_CONFIG_PATH` is unset, the server still uses `server/configs/config.json`.
+If `CONFIG_PATH` is unset, the server still uses `server/configs/config.json`.
 
 ## Environment files
 
-When the server starts, it loads environment variables in this order:
+When the server starts, it reads only `server/.env`.
 
 1. existing exported environment variables
 2. `server/.env`
-3. repo-root `.env` only if `server/.env` does not exist
 
 That means `server/.env` is the canonical place for local REST server credentials such as `GOOGLE_API_KEY`, while exported variables still take precedence.
+
+Startup config JSON also supports `env:VAR_NAME` for string values. The sample `config.json` uses that form for the vector store provider/host/port and the LLM/embedder provider/model names.
 
 ## Local Gemini Flash + Qdrant example
 
@@ -42,7 +43,7 @@ A sample startup config is included at [`configs/config.json`](./configs/config.
 docker run --rm -p 6333:6333 qdrant/qdrant
 ```
 
-2. Create `server/.env` and set the Gemini API key. `MEM0_CONFIG_PATH` is optional because it already defaults to `server/configs/config.json`.
+2. Create `server/.env` and set the Gemini API key. `CONFIG_PATH` is optional because it already defaults to `server/configs/config.json`.
 
 ```bash
 cp server/.env.example server/.env
@@ -50,6 +51,13 @@ cp server/.env.example server/.env
 
 ```env
 GOOGLE_API_KEY=your-google-api-key
+VECTOR_STORE_PROVIDER=qdrant
+VECTOR_STORE_HOST=localhost
+VECTOR_STORE_PORT=6333
+LLM_PROVIDER=gemini
+LLM_MODEL=gemini-2.0-flash
+EMBEDDER_PROVIDER=gemini
+EMBEDDER_MODEL=models/gemini-embedding-001
 ```
 
 3. Start the server from the repo root.
@@ -67,7 +75,8 @@ http://localhost:8000/docs
 Notes:
 
 - The sample config relies on `GOOGLE_API_KEY` from the environment, so the JSON file does not need to contain credentials.
+- The sample config resolves the vector store provider/host/port and the LLM/embedder provider/model fields from `server/.env` via `env:VAR_NAME` references.
 - If `GOOGLE_API_KEY` is already exported in your shell, it overrides the value in `server/.env`.
-- If you want to use a different startup config file, set `MEM0_CONFIG_PATH` explicitly.
+- If you want to use a different startup config file, set `CONFIG_PATH` explicitly.
 - `embedding_model_dims` is set to `768` to match `models/gemini-embedding-001`.
 - If you run the server itself inside Docker, change the Qdrant host in the JSON file from `localhost` to a host reachable from the container, such as `host.docker.internal`.
